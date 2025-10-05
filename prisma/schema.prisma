@@ -1,0 +1,360 @@
+// This is your new Prisma schema file.
+// located at prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Priority {
+  KURDISTAN
+  BAGHDAD
+  BASRA
+  OTHER
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+  YOUTUBE
+  TWITTER
+  TIKTOK
+  TELEGRAM
+  WHATSAPP
+}
+
+enum KurdishDialect {
+  SORANI
+  BADINI
+  KURMANJI
+}
+
+enum UserRole {
+  ADMIN
+  CAMPAIGN_MANAGER
+  ANALYST
+  VIEWER
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  FAILED
+}
+
+enum Sentiment {
+  POSITIVE
+  NEGATIVE
+  NEUTRAL
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  role        UserRole @default(VIEWER)
+  avatar      String?
+  isActive    Boolean  @default(true)
+  lastLogin   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  apiKeys     APIKey[]
+  campaigns   Campaign[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model APIKey {
+  id          String   @id @default(cuid())
+  name        String
+  key         String   @unique
+  userId      String
+  permissions String[] // JSON array of permissions
+  isActive    Boolean  @default(true)
+  lastUsed    DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+model PoliticalParty {
+  id          String @id @default(cuid())
+  name        String @unique
+  nameAr      String?
+  nameKu      String?
+  ideology    String?
+  color       String?
+  website     String?
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  candidates Candidate[]
+
+  @@map("political_parties")
+}
+
+model Candidate {
+  id                String   @id @default(cuid())
+
+  // Multi-language names
+  nameKuSorani      String?
+  nameKuBadini      String?
+  nameKuKurmanji    String?
+  nameAr            String
+  nameEn            String?
+
+  // Basic info
+  partyId           String?
+  region            String   // Governorate
+  priority          Priority @default(OTHER)
+  position          String?  // MP, Governor, etc.
+
+  // Social Media Profiles
+  facebook          String?
+  instagram         String?
+  twitter           String?
+  youtube           String?
+  tiktok            String?
+  telegram          String?
+  whatsapp          String?
+
+  // Contact Information
+  email             String?
+  phone             String?
+  officeAddress     String?
+
+  // Metrics
+  influenceScore    Int      @default(0)
+  followerCount     Int      @default(0)
+  engagementRate    Float    @default(0)
+  sentimentScore    Float    @default(0)
+  isVerified        Boolean  @default(false)
+
+  // Metadata
+  lastUpdated       DateTime @default(now())
+  lastScraped       DateTime @default(now())
+  dataQuality       Float    @default(0) // 0-100 completeness score
+  isActive          Boolean  @default(true)
+
+  // Relations
+  party             PoliticalParty? @relation(fields: [partyId], references: [id])
+  mentions          SocialMention[]
+  campaigns         Campaign[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([priority, influenceScore])
+  @@index([region, updatedAt])
+  @@index([partyId])
+  @@map("candidates")
+}
+
+model SocialMention {
+  id                String   @id @default(cuid())
+  platform          SocialPlatform
+  content           String
+  authorName        String?
+  authorHandle      String?
+  postId            String?  // Platform-specific post ID
+  postUrl           String?
+  mediaUrl          String?
+
+  // Engagement metrics
+  likes             Int      @default(0)
+  comments          Int      @default(0)
+  shares            Int      @default(0)
+  views             Int      @default(0)
+
+  // Analysis
+  sentiment         Sentiment @default(NEUTRAL)
+  sentimentScore    Float    @default(0)
+  language          String?  // Detected language
+  kurdishDialect    KurdishDialect?
+  region            String?  // Detected region
+  topics            String[] // JSON array of topics
+
+  // Metadata
+  isProcessed       Boolean  @default(false)
+  isKurdistanPriority Boolean @default(false)
+  errorMessage      String?
+
+  // Relations
+  candidateId       String?
+  candidate         Candidate? @relation(fields: [candidateId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([platform, createdAt])
+  @@index([isKurdistanPriority, createdAt])
+  @@index([candidateId])
+  @@map("social_mentions")
+}
+
+model KurdistanMention {
+  id                String   @id @default(cuid())
+  platform          SocialPlatform
+  content           String
+  authorName        String?
+  authorHandle      String?
+  postId            String?  // Platform-specific post ID
+  postUrl           String?
+  mediaUrl          String?
+
+  // Engagement metrics
+  likes             Int      @default(0)
+  comments          Int      @default(0)
+  shares            Int      @default(0)
+  views             Int      @default(0)
+
+  // Analysis
+  sentiment         Sentiment @default(NEUTRAL)
+  sentimentScore    Float    @default(0)
+  dialect           KurdishDialect
+  region            String   // Kurdistan region
+  topics            String[] // JSON array of topics
+
+  // Metadata
+  isProcessed       Boolean  @default(false)
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([platform, createdAt])
+  @@index([dialect, region])
+  @@map("kurdistan_mentions")
+}
+
+model ScrapedContent {
+  id                String   @id @default(cuid())
+  title             String
+  content           String
+  url               String   @unique
+  source            String   // Domain name
+  sourceType        String   // news, government, political
+
+  // Analysis
+  relevanceScore    Float    @default(0)
+  language          String?
+  region            String?
+  topics            String[] // JSON array of topics
+
+  // Metadata
+  lastScraped       DateTime @default(now())
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([sourceType, relevanceScore])
+  @@index([region, createdAt])
+  @@map("scraped_content")
+}
+
+model Campaign {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  type              String   // whatsapp, email, sms
+  targetAudience    String   // JSON filters
+
+  // Content
+  message           String
+  language          String?
+  dialect           KurdishDialect?
+
+  // Scheduling
+  scheduledAt       DateTime?
+  sentAt            DateTime?
+  status            CampaignStatus @default(DRAFT)
+
+  // Results
+  sentCount         Int      @default(0)
+  deliveredCount    Int      @default(0)
+  readCount         Int      @default(0)
+  clickCount        Int      @default(0)
+  errorCount        Int      @default(0)
+
+  // Relations
+  userId            String
+  user              User @relation(fields: [userId], references: [id])
+  candidates        Candidate[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, scheduledAt])
+  @@map("campaigns")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  userId      String?
+  ip          String?
+  userAgent   String?
+  payload     String?  // JSON string
+  timestamp   DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId, timestamp])
+  @@map("audit_logs")
+}
+
+model SystemHealth {
+  id                String   @id @default(cuid())
+  service           String   // database, redis, api, etc.
+  status            String   // healthy, degraded, down
+  responseTime      Float?
+  errorMessage      String?
+  lastChecked       DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  @@index([service, lastChecked])
+  @@map("system_health")
+}
+
+model CollectionStats {
+  id                String   @id @default(cuid())
+  period            String   // hourly, daily, weekly
+  startTime         DateTime
+  endTime           DateTime
+
+  // Collection metrics
+  totalMentions     Int      @default(0)
+  kurdistanMentions Int      @default(0)
+  processedMentions Int      @default(0)
+  failedMentions    Int      @default(0)
+
+  // Platform breakdown
+  facebookCount     Int      @default(0)
+  instagramCount    Int      @default(0)
+  youtubeCount      Int      @default(0)
+  twitterCount      Int      @default(0)
+  tiktokCount       Int      @default(0)
+
+  // Language breakdown
+  kurdishSorani     Int      @default(0)
+  kurdishBadini     Int      @default(0)
+  kurdishKurmanji   Int      @default(0)
+  arabicCount       Int      @default(0)
+  englishCount      Int      @default(0)
+
+  createdAt         DateTime @default(now())
+
+  @@index([period, startTime])
+  @@map("collection_stats")
+}
