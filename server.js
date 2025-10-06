@@ -164,21 +164,37 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
-    // Initialize database
-    await initializeDatabase();
-    logger.info('Database connected');
+    // Initialize database (skip if not available for development)
+    try {
+      await initializeDatabase();
+      logger.info('Database connected');
+    } catch (dbError) {
+      logger.warn('Database connection failed, running without database:', dbError.message);
+    }
 
-    // Start background jobs (includes data collection)
-    await startBackgroundJobs();
-    logger.info('Background jobs started');
+    // Start background jobs (includes data collection) - skip if no database
+    try {
+      await startBackgroundJobs();
+      logger.info('Background jobs started');
+    } catch (jobError) {
+      logger.warn('Background jobs failed to start:', jobError.message);
+    }
 
-    // Start persistent data collection service
-    await startPersistentCollection();
-    logger.info('Persistent data collection service started');
+    // Start persistent data collection service - skip if no database
+    try {
+      await startPersistentCollection();
+      logger.info('Persistent data collection service started');
+    } catch (collectionError) {
+      logger.warn('Data collection service failed to start:', collectionError.message);
+    }
 
-    // Start data collection monitoring (reports every 10 minutes)
-    dataCollectionMonitor.startMonitoring();
-    logger.info('Data collection monitoring started');
+    // Start data collection monitoring - skip if no database
+    try {
+      dataCollectionMonitor.startMonitoring();
+      logger.info('Data collection monitoring started');
+    } catch (monitorError) {
+      logger.warn('Monitoring failed to start:', monitorError.message);
+    }
 
     // Start server
     httpServer.listen(PORT, () => {
